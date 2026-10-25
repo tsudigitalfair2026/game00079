@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>もぐらVSわに！激走かわし隊DX</title>
+<style>
+*{
+box-sizing:border-box;
+-webkit-tap-highlight-color:transparent;
+}
+html,body{
+margin:0;
+height:100%;
+overflow:hidden;
+font-family:sans-serif;
+touch-action:none;
+background:#87ceeb;
+}
+.screen{
+position:absolute;
+inset:0;
+display:flex;
+flex-direction:column;
+justify-content:center;
+align-items:center;
+padding:20px;
+text-align:center;
+}
+#gameScreen{display:none;}
+#resultScreen{display:none;}
+
+button{
+font-size:22px;
+padding:16px 28px;
+border:none;
+border-radius:16px;
+background:#ff9800;
+color:#fff;
+min-width:230px;
+font-weight:bold;
+}
+
+.info{
+max-width:450px;
+line-height:1.8;
+font-size:18px;
+}
+
+#hud{
+height:70px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+padding:10px;
+font-size:20px;
+font-weight:bold;
+background:#ffffffcc;
+}
+
+#gameArea{
+position:relative;
+width:100vw;
+height:calc(100vh - 70px);
+overflow:hidden;
+background:
+linear-gradient(#9be7ff 0 70%, #67c66a 70% 100%);
+}
+
+#player{
+position:absolute;
+bottom:20px;
+left:50%;
+transform:translateX(-50%);
+font-size:56px;
+z-index:20;
+user-select:none;
+}
+
+.enemy{
+position:absolute;
+font-size:50px;
+z-index:5;
+}
+
+.star{
+position:absolute;
+font-size:42px;
+z-index:6;
+animation:spin 1s linear infinite;
+}
+
+.effect{
+position:absolute;
+font-size:70px;
+pointer-events:none;
+z-index:50;
+}
+
+#skillBtn{
+position:absolute;
+right:12px;
+bottom:12px;
+width:110px;
+height:110px;
+border-radius:50%;
+font-size:20px;
+background:#e91e63;
+color:white;
+z-index:100;
+}
+
+#skillBtn:disabled{
+background:#888;
+}
+
+#skillInfo{
+position:absolute;
+left:10px;
+bottom:15px;
+background:#0008;
+color:white;
+padding:8px 12px;
+border-radius:12px;
+font-size:16px;
+z-index:100;
+}
+
+#message{
+position:absolute;
+top:90px;
+left:50%;
+transform:translateX(-50%);
+font-size:34px;
+font-weight:bold;
+color:#fff;
+text-shadow:0 0 10px #000;
+z-index:200;
+pointer-events:none;
+}
+
+.invincible{
+filter:drop-shadow(0 0 15px gold);
+animation:blink .3s infinite;
+}
+
+@keyframes blink{
+50%{opacity:.55;}
+}
+
+@keyframes spin{
+from{transform:rotate(0deg);}
+to{transform:rotate(360deg);}
+}
+
+#rank{
+font-size:38px;
+font-weight:bold;
+color:#e91e63;
+}
+</style>
+</head>
+<body>
+
+<div id="startScreen" class="screen">
+<h1>🦫 もぐらVSわに！激走かわし隊DX 🐊</h1>
+
+<div class="info">
+100秒生き残れ！<br><br>
+
+👆 指で左右にスライドして移動！<br>
+⭐ 無敵スターを取ると5秒間無敵！<br>
+💥 必殺技ボタンで画面中のわにを一掃！<br>
+🐊 わにはどんどん速くなる！<br>
+</div>
+
+<br>
+<button id="startBtn">スタート</button>
+</div>
+
+<div id="gameScreen">
+<div id="hud">
+<div>スコア: <span id="score">0</span></div>
+<div>残り: <span id="time">100</span>秒</div>
+</div>
+
+<div id="gameArea">
+<div id="message"></div>
+<div id="player">🦫</div>
+
+<div id="skillInfo">
+必殺技: <span id="skillCount">3</span>
+</div>
+
+<button id="skillBtn">💥<br>必殺技</button>
+</div>
+</div>
+
+<div id="resultScreen" class="screen">
+<h1>結果発表</h1>
+<h2>最終スコア: <span id="finalScore">0</span></h2>
+<div id="rank">C</div>
+<br>
+<button id="retryBtn">もう一度遊ぶ</button>
+</div>
+
+<script>
+const startScreen=document.getElementById("startScreen");
+const gameScreen=document.getElementById("gameScreen");
+const resultScreen=document.getElementById("resultScreen");
+
+const gameArea=document.getElementById("gameArea");
+const player=document.getElementById("player");
+
+const scoreEl=document.getElementById("score");
+const timeEl=document.getElementById("time");
+const finalScore=document.getElementById("finalScore");
+const rankEl=document.getElementById("rank");
+const skillBtn=document.getElementById("skillBtn");
+const skillCountEl=document.getElementById("skillCount");
+const message=document.getElementById("message");
+
+let score=0;
+let timeLeft=100;
+let playerX=0;
+let enemies=[];
+let stars=[];
+
+let speed=5;
+let skills=3;
+let invincible=false;
+
+let spawnEnemyTimer;
+let spawnStarTimer;
+let timerLoop;
+let gameLoop;
+
+function showMessage(text,color){
+message.textContent=text;
+message.style.color=color;
+setTimeout(()=>{
+if(message.textContent===text){
+message.textContent="";
+}
+},1500);
+}
+
+function startGame(){
+
+score=0;
+timeLeft=100;
+speed=5;
+skills=3;
+invincible=false;
+
+enemies=[];
+stars=[];
+
+document.querySelectorAll(".enemy,.star,.effect").forEach(e=>e.remove());
+
+scoreEl.textContent=0;
+timeEl.textContent=100;
+skillCountEl.textContent=skills;
+
+player.classList.remove("invincible");
+
+startScreen.style.display="none";
+resultScreen.style.display="none";
+gameScreen.style.display="block";
+
+playerX=(gameArea.clientWidth/2)-28;
+player.style.left=playerX+"px";
+
+spawnEnemyTimer=setInterval(spawnEnemy,350);
+spawnStarTimer=setInterval(spawnStar,5000);
+
+timerLoop=setInterval(()=>{
+timeLeft--;
+timeEl.textContent=timeLeft;
+speed+=0.35;
+
+if(timeLeft<=0){
+endGame(true);
+}
+},1000);
+
+gameLoop=requestAnimationFrame(update);
+}
+
+function spawnEnemy(){
+const e=document.createElement("div");
+e.className="enemy";
+e.textContent="🐊";
+
+const x=Math.random()*(gameArea.clientWidth-60);
+
+e.style.left=x+"px";
+e.style.top="-60px";
+
+gameArea.appendChild(e);
+
+enemies.push({
+el:e,
+x:x,
+y:-60
+});
+}
+
+function spawnStar(){
+
+if(Math.random()<0.35){
+
+const s=document.createElement("div");
+s.className="star";
+s.textContent="⭐";
+
+const x=Math.random()*(gameArea.clientWidth-50);
+
+s.style.left=x+"px";
+s.style.top="-50px";
+
+gameArea.appendChild(s);
+
+stars.push({
+el:s,
+x:x,
+y:-50
+});
+}
+}
+
+function activateInvincible(){
+
+invincible=true;
+player.classList.add("invincible");
+
+showMessage("⭐ 無敵！","#ffeb3b");
+
+setTimeout(()=>{
+invincible=false;
+player.classList.remove("invincible");
+},5000);
+}
+
+function useSkill(){
+
+if(skills<=0) return;
+
+skills--;
+skillCountEl.textContent=skills;
+
+showMessage("💥 必殺技発動！","#ff5252");
+
+const effect=document.createElement("div");
+effect.className="effect";
+effect.textContent="💥";
+effect.style.left="50%";
+effect.style.top="40%";
+effect.style.transform="translate(-50%,-50%)";
+gameArea.appendChild(effect);
+
+setTimeout(()=>effect.remove(),500);
+
+let removed=enemies.length;
+
+enemies.forEach(e=>e.el.remove());
+enemies=[];
+
+score+=removed*100;
+
+if(skills<=0){
+skillBtn.disabled=true;
+}
+}
+
+function update(){
+
+score++;
+scoreEl.textContent=score;
+
+for(let i=enemies.length-1;i>=0;i--){
+
+const en=enemies[i];
+
+en.y+=speed;
+
+en.el.style.top=en.y+"px";
+
+if(checkHit(player,en.el)){
+
+if(invincible){
+en.el.remove();
+enemies.splice(i,1);
+score+=50;
+continue;
+}else{
+endGame(false);
+return;
+}
+}
+
+if(en.y>gameArea.clientHeight+80){
+en.el.remove();
+enemies.splice(i,1);
+}
+}
+
+for(let i=stars.length-1;i>=0;i--){
+
+const st=stars[i];
+
+st.y+=4;
+
+st.el.style.top=st.y+"px";
+
+if(checkHit(player,st.el)){
+
+activateInvincible();
+
+st.el.remove();
+stars.splice(i,1);
+continue;
+}
+
+if(st.y>gameArea.clientHeight+60){
+st.el.remove();
+stars.splice(i,1);
+}
+}
+
+gameLoop=requestAnimationFrame(update);
+}
+
+function checkHit(a,b){
+
+const ar=a.getBoundingClientRect();
+const br=b.getBoundingClientRect();
+
+return !(
+ar.right<br.left+10 ||
+ar.left>br.right-10 ||
+ar.bottom<br.top+10 ||
+ar.top>br.bottom-10
+);
+}
+
+function endGame(clear){
+
+clearInterval(spawnEnemyTimer);
+clearInterval(spawnStarTimer);
+clearInterval(timerLoop);
+
+cancelAnimationFrame(gameLoop);
+
+gameScreen.style.display="none";
+resultScreen.style.display="flex";
+
+finalScore.textContent=score;
+
+let rank="C";
+
+if(score>1500) rank="S";
+else if(score>1100) rank="A";
+else if(score>700) rank="B";
+
+if(!clear){
+rank="ゲームオーバー";
+}
+
+rankEl.textContent=rank;
+}
+
+function movePlayer(clientX){
+
+const rect=gameArea.getBoundingClientRect();
+
+let x=clientX-rect.left-28;
+
+x=Math.max(
+0,
+Math.min(gameArea.clientWidth-56,x)
+);
+
+playerX=x;
+player.style.left=x+"px";
+}
+
+gameArea.addEventListener("touchstart",e=>{
+movePlayer(e.touches[0].clientX);
+},{passive:false});
+
+gameArea.addEventListener("touchmove",e=>{
+e.preventDefault();
+movePlayer(e.touches[0].clientX);
+},{passive:false});
+
+gameArea.addEventListener("mousemove",e=>{
+movePlayer(e.clientX);
+});
+
+skillBtn.addEventListener("click",useSkill);
+
+document.getElementById("startBtn").onclick=()=>{
+skillBtn.disabled=false;
+startGame();
+};
+
+document.getElementById("retryBtn").onclick=()=>{
+skillBtn.disabled=false;
+startGame();
+};
+</script>
+
+</body>
+</html>
